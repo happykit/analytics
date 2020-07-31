@@ -47,9 +47,6 @@
       "./jest/mutation-observer.js"
     ]
   },
-  "np": {
-    "contents": "dist"
-  },
   "publishConfig": {
     "access": "public"
   },
