@@ -96,13 +96,15 @@ function useAnalyticsClient({
   // used to set a timer, so we can send page views in batches
   const [latestView, setLatestView] = React.useState<Analytics | null>(null);
 
+  const { current: queue } = React.useRef<Analytics[]>([]);
+
   const sendQueue = React.useCallback(() => {
     if (queue.length === 0) return;
 
     // the splice method clears the current queue and returns its items
     const views = queue.splice(0, queue.length);
     navigator.sendBeacon(apiRoute, JSON.stringify({ publicKey, views }));
-  }, [apiRoute, publicKey]);
+  }, [queue, apiRoute, publicKey]);
 
   // We need to use useRouter instead of Router.events.on("routeChangeComplete")
   // because only useRouter contains the original route, e.g. /[project]/foo
@@ -111,8 +113,6 @@ function useAnalyticsClient({
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => setMounted(true), []);
-
-  const { current: queue } = React.useRef<Analytics[]>([]);
 
   // send anything that hasn't been sent yet
   React.useEffect(() => {
@@ -146,7 +146,7 @@ function useAnalyticsClient({
       if (document.referrer === '') return true;
 
       const ref = new URL(document.referrer);
-      return ref.hostname !== location.hostname;
+      return ref.hostname !== window.location.hostname;
     })();
 
     // mark further navigations as subsequent, so they are not tracked as
@@ -165,14 +165,14 @@ function useAnalyticsClient({
       // hot reloading
       const referrer =
         document.referrer &&
-        new URL(document.referrer).hostname === location.hostname
+        new URL(document.referrer).hostname === window.location.hostname
           ? ''
           : document.referrer;
 
-      const searchParams = new URLSearchParams(location.search);
+      const searchParams = new URLSearchParams(window.location.search);
       const urlReferrer = searchParams.get('ref') || undefined;
       return {
-        hostname: location.hostname,
+        hostname: window.location.hostname,
         // Actual path (excluding the query) shown in the browser
         pathname: omitQueryFromPathname(router.asPath),
         // The Next.js route. That is the path of the page in `/pages`.
@@ -210,8 +210,6 @@ function useAnalyticsClient({
       return;
     }
 
-    const body = JSON.stringify({ publicKey, views: [view] });
-
     // sendBeacon works even when a browser window is being closed.
     // It's supported in most major browsers. We queue events in case
     // we can use sendBeacon, otherwise we send them live.
@@ -220,6 +218,8 @@ function useAnalyticsClient({
       queue.push(view);
       setLatestView(view);
     } else {
+      const body = JSON.stringify({ publicKey, views: [view] });
+
       // Since sendBeacon sends a plain string, we don't set any
       // content-type headers on this request either.
       //
