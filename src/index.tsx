@@ -81,13 +81,19 @@ export type AnalyticsConfig = {
 };
 
 function useAnalyticsServer() {}
-function useAnalyticsClient({
-  apiRoute = 'https://happykit.dev/api/pv',
-  publicKey,
-  skip,
-  skipHostnames = ['localhost'],
-  delay = 5000,
-}: AnalyticsConfig) {
+function useAnalyticsClient(options: AnalyticsConfig) {
+  // avoid infinite loops when users pass skipHostnames or a skip function,
+  // as that reference would change on every render
+  const {
+    current: {
+      apiRoute = 'https://happykit.dev/api/pv',
+      publicKey,
+      skip,
+      skipHostnames = ['localhost'],
+      delay = 5000,
+    },
+  } = React.useRef<AnalyticsConfig>(options);
+
   if (!publicKey) {
     throw new Error('@happykit/analytics: missing options.publicKey');
   }
@@ -219,14 +225,13 @@ function useAnalyticsClient({
       setLatestView(view);
     } else {
       const body = JSON.stringify({ publicKey, views: [view] });
-
       // Since sendBeacon sends a plain string, we don't set any
       // content-type headers on this request either.
       //
       // That way the server can parse the request body from a string.
       fetch(apiRoute, { method: 'POST', keepalive: true, body });
     }
-  }, [router, mounted]);
+  }, [router, mounted, apiRoute, publicKey, queue, skip, skipHostnames]);
 }
 
 // this runs on the client only
