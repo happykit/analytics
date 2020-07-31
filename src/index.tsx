@@ -1,7 +1,10 @@
 import * as React from 'react';
+import { useRouter } from 'next/router';
 
 // Delete me
 export const Thing = () => {
+  const router = useRouter();
+
   const [text, setText] = React.useState<string>('loading');
   React.useEffect(() => {
     fetch('/api')
@@ -10,5 +13,9 @@ export const Thing = () => {
         setText(data.text);
       });
   }, []);
-  return <div>{text}</div>;
+  return (
+    <div>
+      {text} <p>{router.pathname}</p>
+    </div>
+  );
 };

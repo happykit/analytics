@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen } from '../jest/test-utils';
 import { rest } from 'msw';
 import { setupServer } from 'msw/node';
 import { Thing } from '../src';
@@ -19,12 +19,16 @@ afterAll(() => server.close());
 
 describe('it', () => {
   it('renders without crashing', async () => {
-    render(<Thing />);
+    render(<Thing />, {
+      router: { pathname: '/home' },
+    });
     const text = await screen.findByText(
       'the snozzberries taste like snozzberries'
     );
-    screen.debug();
+    const pathname = await screen.findByText('/home');
+    // screen.debug();
 
     expect(text).toBeInTheDocument();
+    expect(pathname).toBeInTheDocument();
   });
 });
