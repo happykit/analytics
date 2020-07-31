@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
 import { render, screen } from '../jest/test-utils';
-import useAnalytics, { Analytics } from '../src';
+import { useAnalytics, Analytics } from '../src';
 
 // navigator.sendBeacon is not defined in jsdom, so the
 // useAnalytics function will always send page views direclty through fetch.
