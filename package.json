@@ -50,6 +50,9 @@
   "np": {
     "contents": "dist"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@sheerun/mutationobserver-shim": "0.3.3",
     "@testing-library/jest-dom": "5.11.2",
