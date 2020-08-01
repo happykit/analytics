@@ -1,5 +1,5 @@
 <a id="nav">
-  <img src="https://i.imgur.com/pr0x88T.png" width="100%" />
+  <img src="https://i.imgur.com/oeUhHfO.png" width="100%" />
 </a>
 
 <div align="right">
