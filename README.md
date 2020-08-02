@@ -39,7 +39,7 @@ Set up a `pages/_app.js` file with this content:
 import { useAnalytics } from '@happykit/analytics';
 
 function MyApp({ Component, pageProps }) {
-  useAnalytics({ publicKey: 'HAPPYKIT KEY' }); // <-- add this
+  useAnalytics({ publicKey: '<Your HappyKit Public Key>' }); // <-- add this
 
   return <Component {...pageProps} />;
 }
@@ -47,7 +47,7 @@ function MyApp({ Component, pageProps }) {
 export default MyApp;
 ```
 
-> Get your _HappyKit Key_ by creating a free account on [happykit.dev](https://happykit.dev/signup).
+> Get your _HappyKit Public Key_ by creating a free account on [happykit.dev](https://happykit.dev/signup).
 
 <details>
 <summary>Using TypeScript?</summary>
@@ -83,7 +83,7 @@ Example:
 
 ```js
 useAnalytics({
-  publicKey: "HAPPYKIT KEY",
+  publicKey: "pk_live_5093bcd381",
   skip: (pageView) => pageView.pathname === '/some-ignored-path'
 })
 ```
