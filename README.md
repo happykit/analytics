@@ -47,7 +47,7 @@ function MyApp({ Component, pageProps }) {
 export default MyApp;
 ```
 
-> Get your _HappyKit Public Key_ by creating a free account on [happykit.dev](https://happykit.dev/signup).
+> Create a free account on [happykit.dev](https://happykit.dev/signup) to get your _HappyKit Public Key_ 
 
 <details>
 <summary>Using TypeScript?</summary>
