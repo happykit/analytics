@@ -34,10 +34,8 @@
     "singleQuote": true,
     "trailingComma": "es5"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/happykit/analytics"
-  },
+  "repository": "happykit/analytics",
+  "homepage": "https://happykit.dev",
   "name": "@happykit/analytics",
   "author": "Dominik Ferber",
   "module": "dist/analytics.esm.js",
