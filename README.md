@@ -11,7 +11,6 @@
 &nbsp;
 &nbsp;
 
-
 Add analytics to your Next.js application with a single React Hook. This package integrates your Next.js application with HappyKit Analytics. Create a free [happykit.dev](https://happykit.dev/signup) account to get started.
 
 ## Key Features
@@ -19,6 +18,9 @@ Add analytics to your Next.js application with a single React Hook. This package
 - Track page views and unique visitors
 - Integrate using a single React Hook
 - Next.js specific dynamic route tracking (e.g. `/[user]`)
+- GDPR compliant by default. No cookie notice necessary.
+- Tiny: [1kB minified + gzipped](https://bundlephobia.com/result?p=@happykit/analytics)
+- No external runtime, so no costly additional request to load a runtime
 - Written in TypeScript
 
 ## Installation
@@ -47,7 +49,7 @@ function MyApp({ Component, pageProps }) {
 export default MyApp;
 ```
 
-> Create a free account on [happykit.dev](https://happykit.dev/signup) to get your _HappyKit Public Key_ 
+> Create a free account on [happykit.dev](https://happykit.dev/signup) to get your _HappyKit Public Key_
 
 <details>
 <summary>Using TypeScript?</summary>
@@ -69,7 +71,6 @@ export default MyApp
 
 You can read more about using a custom `_app.js` component [here](https://nextjs.org/docs/advanced-features/custom-app).
 
-
 ## Options
 
 `useAnalytics(options)` accepts the following options object:
@@ -83,7 +84,7 @@ Example:
 
 ```js
 useAnalytics({
-  publicKey: "pk_live_5093bcd381",
-  skip: (pageView) => pageView.pathname === '/some-ignored-path'
-})
+  publicKey: 'pk_live_5093bcd381',
+  skip: pageView => pageView.pathname === '/some-ignored-path',
+});
 ```
