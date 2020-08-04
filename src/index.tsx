@@ -25,7 +25,7 @@ export type Analytics = {
    */
   width?: number;
   /**
-   * This tells us if this visit is unique. Don’t send this field if you don’t detect unique page views
+   * This tells us if this visit is unique.
    */
   unique?: boolean;
   /**
@@ -80,45 +80,171 @@ export type AnalyticsConfig = {
   delay?: number;
 };
 
-function useAnalyticsServer() {}
-function useAnalyticsClient(options: AnalyticsConfig) {
-  // avoid infinite loops when users pass skipHostnames or a skip function,
-  // as that reference would change on every render
-  const {
-    current: {
-      apiRoute = 'https://happykit.dev/api/pv',
-      publicKey,
-      skip,
-      skipHostnames = ['localhost'],
-      delay = 5000,
-    },
-  } = React.useRef<AnalyticsConfig>(options);
+type AnalyticsReducerState = {
+  queue: Analytics[];
+  hadFirstPageView: boolean;
+  lastPathname: string;
+};
 
+type AnalyticsReducerAction =
+  | {
+      type: 'view';
+      payload: Analytics;
+    }
+  | { type: 'clear'; payload: Analytics[] };
+
+function analyticsReducer(
+  state: AnalyticsReducerState,
+  action: AnalyticsReducerAction
+): AnalyticsReducerState {
+  if (action.type === 'view') {
+    const view =
+      state.hadFirstPageView && action.payload.unique
+        ? // subsequent page views can never be unique, so we overwrite it
+          { ...action.payload, unique: false }
+        : action.payload;
+
+    // Avoid adding duplicate.
+    // We should only need this in case a React Fast Refresh happened
+    if (view.pathname === state.lastPathname) return state;
+
+    return {
+      ...state,
+      queue: [...state.queue, view],
+      hadFirstPageView: true,
+      lastPathname: view.pathname,
+    };
+  }
+
+  if (action.type === 'clear') {
+    return {
+      ...state,
+      queue: state.queue.filter(view => !action.payload.includes(view)),
+    };
+  }
+
+  return state;
+}
+
+// the url we are passed looks like /projects?x=5
+// but we are only interested in /projects
+const omitQueryFromPathname = (url: string) => {
+  const u = new URL(`http://e.de${url}`);
+  return u.pathname;
+};
+
+function useAnalyticsServer() {}
+function useAnalyticsClient({
+  apiRoute = 'https://happykit.dev/api/pv',
+  publicKey,
+  skip,
+  skipHostnames = ['localhost'],
+  delay = 5000,
+}: AnalyticsConfig) {
   if (!publicKey) {
     throw new Error('@happykit/analytics: missing options.publicKey');
   }
+  const router = useRouter();
+  const [state, send] = React.useReducer(analyticsReducer, {
+    queue: [],
+    hadFirstPageView: false,
+    lastPathname: '',
+  });
 
-  const subsequent = React.useRef(false);
-  // used to set a timer, so we can send page views in batches
-  const [latestView, setLatestView] = React.useState<Analytics | null>(null);
+  const view = React.useMemo<Analytics>(() => {
+    const referrer =
+      document.referrer &&
+      new URL(document.referrer).hostname === window.location.hostname
+        ? ''
+        : document.referrer;
 
-  const { current: queue } = React.useRef<Analytics[]>([]);
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlReferrer = searchParams.get('ref') || undefined;
+    return {
+      hostname: window.location.hostname,
+      // Actual path (excluding the query) shown in the browser
+      pathname: omitQueryFromPathname(router.asPath),
+      // The Next.js route. That is the path of the page in `/pages`.
+      route: router.pathname,
+      ua: navigator.userAgent,
+      width: window.innerWidth,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      referrer,
+      urlReferrer,
+      // This gets overwritten by the reducer, as subsequent page views can
+      // never be unique
+      unique: (() => {
+        if (document.referrer === '') return true;
 
+        const ref = new URL(document.referrer);
+        return ref.hostname !== window.location.hostname;
+      })(),
+      referrerHostname: urlReferrer
+        ? urlReferrer
+        : referrer
+        ? new URL(referrer).hostname
+        : undefined,
+      referrerPathname: urlReferrer
+        ? undefined
+        : referrer
+        ? new URL(referrer).pathname
+        : undefined,
+      time: Date.now(),
+    };
+  }, [router.pathname, router.asPath]);
+
+  const skipped = // skip ignored hostnames
+    (Array.isArray(skipHostnames) &&
+      skipHostnames.some(
+        hostname => hostname.toLowerCase() === view.hostname.toLowerCase()
+      )) ||
+    // skip events as defined by user
+    (typeof skip === 'function' && skip(view));
+
+  React.useEffect(() => {
+    if (skipped) return;
+
+    send({ type: 'view', payload: view });
+  }, [view, skipped]);
+
+  const queue = state.queue;
   const sendQueue = React.useCallback(() => {
     if (queue.length === 0) return;
+    const views = [...queue];
 
-    // the splice method clears the current queue and returns its items
-    const views = queue.splice(0, queue.length);
-    navigator.sendBeacon(apiRoute, JSON.stringify({ publicKey, views }));
-  }, [queue, apiRoute, publicKey]);
+    send({ type: 'clear', payload: views });
+    if (typeof navigator.sendBeacon === 'function') {
+      navigator.sendBeacon(apiRoute, JSON.stringify({ publicKey, views }));
+    } else {
+      const body = JSON.stringify({ publicKey, views });
+      // Since sendBeacon sends a plain string, we don't set any
+      // content-type headers on this request either.
+      //
+      // That way the server can parse the request body from a string.
+      fetch(apiRoute, { method: 'POST', keepalive: true, body });
+    }
+  }, [queue, apiRoute, publicKey, send]);
 
-  // We need to use useRouter instead of Router.events.on("routeChangeComplete")
-  // because only useRouter contains the original route, e.g. /[project]/foo
-  const router = useRouter();
+  React.useEffect(() => {
+    if (state.queue.length === 0) return;
 
-  const [mounted, setMounted] = React.useState(false);
+    const supportsBeacon = typeof navigator.sendBeacon === 'function';
+    // sendBeacon works even when a browser window is being closed.
+    // It's supported in most major browsers. We queue events in case
+    // we can use sendBeacon, otherwise we send them live.
+    const adjustedDelay = supportsBeacon ? delay : 0;
 
-  React.useEffect(() => setMounted(true), []);
+    if (!supportsBeacon) {
+      sendQueue();
+      return;
+    }
+
+    const timer = setTimeout(sendQueue, adjustedDelay);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [state, apiRoute, delay, sendQueue]);
 
   // send anything that hasn't been sent yet
   React.useEffect(() => {
@@ -127,111 +253,6 @@ function useAnalyticsClient(options: AnalyticsConfig) {
       window.removeEventListener('beforeunload', sendQueue);
     };
   }, [sendQueue]);
-
-  // wait at most 5 seconds since the latest page view before sending them
-  React.useEffect(() => {
-    if (latestView === null) return;
-
-    const timer = window.setTimeout(sendQueue, delay);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [latestView, delay, sendQueue]);
-
-  React.useEffect(() => {
-    // Make sure the initial page isn't tracked twice in case query params are
-    // present. Next.js will render twice when query params are present on
-    // the initial page. The first render will be missing query params for
-    // static pages. Such a render is present when pathname doesn't match asPath
-    // and when the query is missing.
-    if (!mounted) return;
-
-    const unique = (() => {
-      // only the first render can be unique
-      if (subsequent.current) return false;
-      if (document.referrer === '') return true;
-
-      const ref = new URL(document.referrer);
-      return ref.hostname !== window.location.hostname;
-    })();
-
-    // mark further navigations as subsequent, so they are not tracked as
-    // unique in any case
-    subsequent.current = true;
-
-    // the url we are passed looks like /projects?x=5
-    // but we are only interested in /projects
-    const omitQueryFromPathname = (url: string) => {
-      const u = new URL(`http://e.de${url}`);
-      return u.pathname;
-    };
-
-    const view: Analytics = (() => {
-      // avoid tracking site as its own referrer, which happens in case of
-      // hot reloading
-      const referrer =
-        document.referrer &&
-        new URL(document.referrer).hostname === window.location.hostname
-          ? ''
-          : document.referrer;
-
-      const searchParams = new URLSearchParams(window.location.search);
-      const urlReferrer = searchParams.get('ref') || undefined;
-      return {
-        hostname: window.location.hostname,
-        // Actual path (excluding the query) shown in the browser
-        pathname: omitQueryFromPathname(router.asPath),
-        // The Next.js route. That is the path of the page in `/pages`.
-        route: router.pathname,
-        ua: navigator.userAgent,
-        width: window.innerWidth,
-        unique,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        referrer,
-        urlReferrer,
-        referrerHostname: urlReferrer
-          ? urlReferrer
-          : referrer
-          ? new URL(referrer).hostname
-          : undefined,
-        referrerPathname: urlReferrer
-          ? undefined
-          : referrer
-          ? new URL(referrer).pathname
-          : undefined,
-        time: Date.now(),
-      };
-    })();
-
-    // ignore certain page views
-    if (
-      // skip ignored hostnames
-      (Array.isArray(skipHostnames) &&
-        skipHostnames.some(
-          hostname => hostname.toLowerCase() === view.hostname.toLowerCase()
-        )) ||
-      // skip events as defined by user
-      (typeof skip === 'function' && skip(view))
-    ) {
-      return;
-    }
-
-    // sendBeacon works even when a browser window is being closed.
-    // It's supported in most major browsers. We queue events in case
-    // we can use sendBeacon, otherwise we send them live.
-    //
-    if (typeof navigator.sendBeacon === 'function') {
-      queue.push(view);
-      setLatestView(view);
-    } else {
-      const body = JSON.stringify({ publicKey, views: [view] });
-      // Since sendBeacon sends a plain string, we don't set any
-      // content-type headers on this request either.
-      //
-      // That way the server can parse the request body from a string.
-      fetch(apiRoute, { method: 'POST', keepalive: true, body });
-    }
-  }, [router, mounted, apiRoute, publicKey, queue, skip, skipHostnames]);
 }
 
 // this runs on the client only

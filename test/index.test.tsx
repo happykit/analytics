@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
-import { render, screen } from '../jest/test-utils';
+import { render, screen, act } from '../jest/test-utils';
 import { useAnalytics, Analytics } from '../src';
 
 // navigator.sendBeacon is not defined in jsdom, so the
@@ -179,8 +179,6 @@ describe('when using fetch', () => {
   });
 });
 
-// const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms));
-
 describe('when using navigator.sendBeacon', () => {
   let n: typeof global.navigator.sendBeacon;
   beforeEach(() => {
@@ -203,7 +201,10 @@ describe('when using navigator.sendBeacon', () => {
 
     // not called yet because it gets queued
     expect(navigator.sendBeacon).toHaveBeenCalledTimes(0);
-    jest.runAllTimers();
+
+    act(() => {
+      jest.runAllTimers();
+    });
 
     // called now because we forwarded the timers
     expect(navigator.sendBeacon).toHaveBeenCalledTimes(1);
